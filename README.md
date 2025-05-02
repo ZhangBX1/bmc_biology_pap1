@@ -1,2 +1,2 @@
 # pap1_bmc
-The codes to make figures of single-cell RNA-seq and time-series metabolomics data of Arabidopsis pap1-D
+The codes are to make figures of paper: single-cell RNA-seq and time-series metabolomics data of Arabidopsis pap1-D
