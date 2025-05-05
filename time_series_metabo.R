@@ -923,79 +923,60 @@ cluster_summary <- comparison_data %>%
 # 导出聚类摘要
 write.csv(cluster_summary, "cluster_comparison_summary.csv", row.names = FALSE)
 
-# 手动创建数据框
-pathway_data <- data.frame(
-  Pathway.Name = c("Glutathione metabolism", "Butanoate metabolism", "Arginine biosynthesis", 
-                   "Glyoxylate and dicarboxylate metabolism", "Nitrogen metabolism", 
-                   "beta-Alanine metabolism", "Citrate cycle (TCA cycle)", 
-                   "Valine, leucine and isoleucine biosynthesis", 
-                   "Alanine, aspartate and glutamate metabolism", "Linoleic acid metabolism",
-                   "Biosynthesis of various plant secondary metabolites", 
-                   "Arginine and proline metabolism", "Arachidonic acid metabolism",
-                   "Tyrosine metabolism", "Propanoate metabolism", 
-                   "Carbon fixation by Calvin cycle", "Starch and sucrose metabolism",
-                   "Pyruvate metabolism", "Lipoic acid metabolism", "Purine metabolism"),
-  Match.Status = c("4/26", "3/17", "3/18", "3/29", "2/12", "2/18", "2/20", "2/22", 
-                   "2/22", "1/4", "2/29", "2/32", "1/9", "1/17", "1/20", "1/21", 
-                   "1/22", "1/23", "1/24", "2/75"),
-  p = c(6.7291E-4, 0.0023108, 0.0027428, 0.010894, 0.015559, 0.033955, 0.041329, 
-        0.04925, 0.04925, 0.06437, 0.080723, 0.095724, 0.13925, 0.24724, 0.28428, 
-        0.29623, 0.30799, 0.31956, 0.33095, 0.35302),
-  log_p = c(3.172, 2.6362, 2.5618, 1.9628, 1.808, 1.4691, 1.3838, 1.3076, 1.3076, 
-            1.1913, 1.093, 1.019, 0.8562, 0.60689, 0.54626, 0.52837, 0.51146, 
-            0.49545, 0.48024, 0.4522),
-  Holm_p = c(0.061908, 0.21028, 0.24685, 0.96955, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 
-             1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
-  FDR = c(0.061908, 0.084113, 0.084113, 0.25056, 0.28629, 0.50345, 0.50345, 
-          0.50345, 0.50345, 0.5922, 0.67514, 0.73388, 0.98548, 1.0, 1.0, 1.0, 
-          1.0, 1.0, 1.0, 1.0),
-  Impact = c(0.41361, 0.0, 0.21244, 0.12856, 0.05882, 0.13889, 0.09374, 0.0, 
-             0.39568, 0.0, 0.16, 0.11607, 0.0, 0.0, 0.06914, 0.05923, 0.0, 
-             0.14351, 0.0, 0.00804),
-  Details = rep("KEGG", 20)
-)
-
-
-significant_pathways <- pathway_data[pathway_data$p > 0.05, ]
-
-# 筛选p值小于0.05的通路
-significant_pathways <- pathway_data[pathway_data$p < 0.05, ]
-
-# 对筛选后的通路按p值排序
-significant_pathways <- significant_pathways[order(significant_pathways$p), ]
-
-# 为了可视化，我们需要将通路名称转换为因子，并按p值排序
-significant_pathways$Pathway.Name <- factor(significant_pathways$Pathway.Name, 
-                                            levels = rev(significant_pathways$Pathway.Name))
-
-# 创建气泡图
+# 加载必要的包
 library(ggplot2)
+library(dplyr)
+library(readxl)
 
-ggplot(significant_pathways, aes(x = Impact, y = Pathway.Name)) +
-  geom_point(aes(size = log_p, color = p)) +
-  scale_color_gradient(low = "red", high = "blue") +
-  scale_size_continuous(range = c(4, 12)) +  # 增大气泡的大小范围
-  labs(title = "Pathway Enrichment Analysis",
-       x = "Pathway Impact",
-       y = "",
-       size = "-log(p-value)",
-       color = "p-value") +
-  theme_bw() +
-  theme(
-    axis.text.y = element_text(size = 16, face = "bold"),  # 加粗Y轴文字
-    axis.text.x = element_text(size = 16, face = "bold"),  # 加粗X轴文字
-    axis.title.x = element_text(size = 20, face = "bold"), # 加粗X轴标题
-    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),  # 加粗标题
-    legend.title = element_text(size = 16, face = "bold"),  # 加粗图例标题
-    legend.text = element_text(size = 12),  # 调整图例文字大小
-    panel.grid.major = element_line(color = "gray80"),  # 加深网格线
-    panel.grid.minor = element_line(color = "gray90")   # 加深次要网格线
-  ) +
-  # 添加X轴和Y轴的刻度线
-  scale_x_continuous(breaks = seq(0, 0.5, by = 0.1), limits = c(-0.05, 0.5)) +
-  # 添加数据标签
-  geom_text(aes(label = sprintf("%.3f", p)), vjust = -1.5, size = 3, fontface = "bold")
+# 读取数据
+data <- read_excel("enrichment.xlsx")
 
-# 保存图片，增加分辨率
-ggsave("significant_pathways.tiff", width = 10, height = 6, dpi = 300)
+# 筛选p值<0.05的通路
+sig_pathways <- data %>%
+  filter(p < 0.05) %>%
+  # 按cluster和p值排序
+  arrange(cluster, p)
+# 为每个cluster创建气泡图
+plot_bubble_chart <- function(cluster_data, cluster_num) {
+  if(nrow(cluster_data) == 0) {
+    return(NULL)  # 如果该cluster没有显著通路，返回NULL
+  }
+  
+  # 创建气泡图，使用现成的-log(p)和Impact
+  p <- ggplot(cluster_data, aes(x = Impact, y = reorder(`Pathway Name`, `-log(p)`))) +
+    geom_point(aes(size = `-log(p)`, color = `-log(p)`)) +
+    scale_size_continuous(name = "-log10(p-value)", range = c(3, 10)) +
+    scale_color_gradient(name = "-log10(p-value)", low = "blue", high = "red") +
+    labs(
+      title = paste("Cluster", cluster_num, "Enriched Pathways (p < 0.05)"),
+      x = "Pathway Impact",
+      y = ""
+    ) +
+    theme_bw() +
+    theme(
+      # 将Y轴文本（通路名称）设置为加粗
+      axis.text.y = element_text(size = 10, face = "bold"),
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+  
+  # 保存图片，分辨率300dpi，使用TIFF格式
+  ggsave(
+    filename = paste0("Cluster_", cluster_num, "_Pathways.tiff"),
+    plot = p,
+    width = 10,
+    height = 2 + nrow(cluster_data) * 0.3,  # 根据通路数量调整高度
+    dpi = 300
+  )
+  
+  return(p)
+}
 
+# 获取所有唯一的cluster值
+clusters <- unique(sig_pathways$cluster)
+
+# 为每个cluster创建并保存图表
+plots <- list()
+for(c in clusters) {
+  cluster_data <- sig_pathways %>% filter(cluster == c)
+  plots[[paste0("cluster_", c)]] <- plot_bubble_chart(cluster_data, c)
+}
